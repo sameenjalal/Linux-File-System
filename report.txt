@@ -1,0 +1,112 @@
+Sameen Jalal
+Jeremy Schiff
+
+CS416 Assignment 3
+Unix-Style Filesystem
+
+Part 1: experiences
+
+	At the beginning of the project, we quickly realized that we would need
+to make a set of private functions which would do all of the primitive low
+level operations of the file system.  As suggested in the instructions, the
+first thing we did was to write wrappers around the existing read, write, and
+lseek system calls.  Our wrappers simply perform read, write, and lseek in
+increments of BLOCK_SIZE(512 bytes).
+	
+The next thing we did was to make a policy decision as to how many inodes
+would exist in our filesystem.  There is a tradeoff between the number of
+inodes which equates to the maximum number of files and the amount of other
+disk space is available for the files to actually be stored.  We decided to
+devote 5% of disk space to inodes.
+
+	Then, we had to design the various filesystem constructs which would be
+used to save the state of the filesystem on the disk.  We needed a superblock
+structure, an inode structure, and a free data block structure:
+
+- Superblock contains the name of the filesystem, a count of the total blocks, a
+count of the number of currently allocated blocks, a count of the maximum
+files (this is also the inode count), a count of the number of inodes
+currently being used, and pointers to the first free (not in use) inode and
+the first free data block.
+
+- Inode contains the filesize, a flag saying if the file is a directory or
+  regular file, pointers to the next and previous free inodes (only used when
+this is a free node), 10 pointers to data blocks, 1 single indirect pointer,
+and 1 double indirect pointer.
+
+	Then, we realized we needed some functions which would make the process of
+reading and writing these various filesystem constructs to and from the disk
+painless.  We created functions to get an inode based on its inumber, write an
+inode back to disk, get a free data block based on its block number, and get
+the superblock.
+
+	Next, we wrote functions which would manage the doubly linked lists of
+free inodes and data blocks on the disk.  We wrote functions that pull new
+blocks and inodes out of the doubly linked lists and functions which return
+blocks and inodes to these lists (when files are deleted for example).  Since
+these functions manage the free lists, none of the other functions need to
+worry about them, aside from format_fs which builds the lists in the first place.
+
+	In addition, file_read, file_write, file_mkdir, file_rmdir, and file_lseek
+all called for repeatedly traversing the data block pointer system of inodes
+to get to the file's data blocks.  Much like a virtual memory system, the
+filesystem maintains the illusion that files exists in contiguous blocks on
+disk.
+
+	Due to the complexity of the indirect pointers and double indirect pointers,
+we found it useful to make a function which does sort of a virtual address 
+translation: it takes the block offset within a file and returns the absolute 
+location of that block on the disk.For example, say you have a file which takes 
+up 50 blocks, and you want some data on the 35th block of the file.  This 
+function will return the absolute location of that block on the disk.  This 
+made writing the other functions much easier since they no longer had to worry 
+about traversing the indirect structure of the inode's data pointers.  We also 
+made a function which behaves similarly and gives the inumber of a file based 
+on a path given as a character array.  This greatly simplified all functions 
+which take paths as arguments.
+
+	After having written file_mkdir and file_rmdir, it became apparent when we
+started working on file_create and file_delete that they are nearly identical
+to the analagous directory functions.  With this in mind, we simply created
+two helper functions which actually do all of the work of (file_create and
+file_mkdir) and (file_delete and file_rmdir).  They simply take an extra
+argument specifying whether we're dealing with a file or a directory, and
+their behcavior is slightly modified as such. This saved a lot of work and
+duplicate code from being written.
+
+	file_open and file_close called for a data structure which was both
+array-addressable and also infinitely expandable.  To satisfy these
+requirements, we implemented a simple arraylist.  The arraylist maintains an
+internal array.  When the internal array is filled, the arraylist cretes a new
+array of twice the size and copies all of the data over.  The contents of the
+arraylist were simple structs containing the inumber of the file and the file
+cursor, which is used by file_lseek, file_read, and file_write to keep track
+of a user's position in a file.
+
+	Overall we found that about half of the work we had to do was directly in
+the functions which represent the api presented to users of our filesystem,
+and about half of it was in the "behind the scenes" helper functions which
+constitute a private api we made to make the public functions easier to write.
+
+Part 2: Work distribution
+
+Public api functions:
+
+Sameen did:
+open_fs
+close_fs
+file_read
+file_write
+file_lseek
+file_open
+file_close
+
+Jeremy did:
+format_fs
+file_create
+file_delete
+file_mkdir
+file_rmdir
+file_listdir
+file_printdir
+
